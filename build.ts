@@ -7,7 +7,6 @@ import { fileURLToPath } from "node:url";
  *
  * Usage:
  *   bun run build                # -> dist/siliconflower.exe (Windows x64)
- *   bun run build -- --cjs       # optional flag handled below
  *
  * Notes:
  *  - `react-devtools-core` is an optional peer of `ink`. It is only used by Ink

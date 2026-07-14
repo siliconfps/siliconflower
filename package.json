@@ -12,7 +12,6 @@
     "config": "bun run src/index.tsx config",
     "typecheck": "tsc --noEmit",
     "build": "bun run build.ts",
-    "build:clean": "Remove-Item -Recurse -Force dist -ErrorAction SilentlyContinue; bun run build.ts",
     "install:bin": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1"
   },
   "dependencies": {
