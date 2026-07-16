@@ -6,7 +6,7 @@ import { startApp } from "./App.js";
 import type { Mode, ReasoningLevel } from "./types.js";
 import { REASONING_LEVELS } from "./types.js";
 import { MODES } from "./modes.js";
-import { skillsDir, loadSkills } from "./skills.js";
+import { skillsDir, loadSkills, syncSkills } from "./skills.js";
 import { logFile, tailLogs } from "./logger.js";
 import { log } from "./logger.js";
 
@@ -14,14 +14,14 @@ const program = new Command();
 
 program
   .name("siliconflower")
-  .description("Agente de IA CLI com MCP, reasoning, skills, modos e backends OpenAI/Anthropic-compatible.")
+  .description("CLI/TUI AI agent with MCP, reasoning, skills, modes, and OpenAI/Anthropic-compatible backends.")
   .version("0.1.0")
-  .option("-m, --model <id>", "sobrescrever o modelo")
-  .option("-r, --reasoning <level>", `nível de reasoning: ${REASONING_LEVELS.join(", ")}`)
-  .option("--mode <mode>", `modo: ${MODES.join(", ")}`)
-  .option("--provider <type>", "forçar provider: openai | anthropic")
-  .option("--base-url <url>", "sobrescrever a URL base da API")
-  .option("--api-key <key>", "sobrescrever a API key")
+  .option("-m, --model <id>", "override the model")
+  .option("-r, --reasoning <level>", `reasoning level: ${REASONING_LEVELS.join(", ")}`)
+  .option("--mode <mode>", `mode: ${MODES.join(", ")}`)
+  .option("--provider <type>", "force provider: openai | anthropic")
+  .option("--base-url <url>", "override the API base URL")
+  .option("--api-key <key>", "override the API key")
   .action(async (opts) => {
     const exists = await configExists();
     if (!exists) {
@@ -44,56 +44,64 @@ program
 
 program
   .command("config")
-  .description("Reexecutar a configuração inicial")
+  .description("Re-run the setup wizard")
   .action(async () => {
     const existing = await loadConfig();
     await runSetup(existing);
-    console.log("Pronto. Execute 'siliconflower' para conversar.");
+    console.log("Done. Run `siliconflower` to start.");
   });
 
 program
   .command("show")
-  .description("Mostrar o caminho e conteúdo da configuração atual")
+  .description("Show the path and contents of the current config")
   .action(async () => {
-    console.log("Caminho:", configFile());
-    console.log("Diretório:", configDir());
+    console.log("Config path:", configFile());
+    console.log("Config dir:", configDir());
     const cfg = await loadConfig();
     if (!cfg) {
-      console.log("Nenhuma configuração encontrada. Execute 'siliconflower config'.");
+      console.log("No config found. Run `siliconflower config` to set one up.");
       return;
     }
-    const masked = { ...cfg, apiKey: cfg.apiKey ? "••••" + cfg.apiKey.slice(-4) : "" };
+    const masked = { ...cfg, apiKey: cfg.apiKey ? "***" + cfg.apiKey.slice(-4) : "" };
     console.log(JSON.stringify(masked, null, 2));
   });
 
 program
   .command("ensure")
-  .description("Criar configuração se ausente e sair")
+  .description("Create config if missing and exit")
   .action(async () => {
     await ensureConfig();
   });
 
 program
   .command("skills")
-  .description("Listar skills (.md) disponíveis")
+  .description("List available skills (.md)")
   .action(async () => {
-    console.log("Diretório de skills:", skillsDir());
+    console.log("Skills directory:", skillsDir());
     const skills = await loadSkills();
     if (!skills.length) {
-      console.log("Nenhuma skill encontrada. Coloque arquivos .md em:", skillsDir());
+      console.log("No skills found. Drop .md files into:", skillsDir());
       return;
     }
     for (const s of skills) {
-      console.log(`- ${s.name}${s.title ? `  — ${s.title}` : ""}`);
+      console.log(`- ${s.name}${s.title ? `  -- ${s.title}` : ""}`);
     }
+  })
+  .command("sync")
+  .description("Copy bundled example skills to ~/.siliconflower/skills")
+  .action(async () => {
+    const res = await syncSkills();
+    if (res.copied.length) console.log("Copied:", res.copied.join(", "));
+    if (res.skipped.length) console.log("Skipped (already exist):", res.skipped.join(", "));
+    if (res.errors.length) console.error("Errors:", res.errors.join(", "));
   });
 
 program
   .command("logs")
-  .description("Mostrar as últimas linhas do log")
-  .option("-n, --lines <n>", "quantidade de linhas", "50")
+  .description("Show the last lines of the log")
+  .option("-n, --lines <n>", "number of lines", "50")
   .action(async (opts) => {
-    console.log("Arquivo de log:", logFile());
+    console.log("Log file:", logFile());
     const n = parseInt(opts.lines, 10) || 50;
     const tail = await tailLogs(n);
     console.log(tail);

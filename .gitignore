@@ -1,10 +1,13 @@
 # Dependencies
 node_modules/
-bun.lockb
-bun.lock
 package-lock.json
 yarn.lock
 pnpm-lock.yaml
+
+# Bun lockfile is the canonical text lock; commit it via `bun.lock`.
+# The binary lockfile `bun.lockb` (older Bun versions) is not used here.
+# bun.lock
+bun.lockb
 
 # Build output
 dist/
@@ -17,7 +20,7 @@ build/
 !.env.example
 *.local
 
-# Siliconflower user data (config, logs, skills) — never commit user secrets
+# Siliconflower user data (config, logs, skills) -- never commit user secrets
 .siliconflower/
 
 # OS / editor

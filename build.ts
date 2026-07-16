@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, rmSync, readdirSync, renameSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, rmSync, readdirSync, renameSync, statSync, cpSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -47,6 +47,9 @@ const shimPlugin = {
 // Clean previous output
 rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
+
+// Copy skills folder to dist for bundling
+cpSync(join(root, "skills"), join(outDir, "skills"), { recursive: true });
 
 const result = await Bun.build({
   entrypoints: [join(root, "src", "index.tsx")],

@@ -1,13 +1,12 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { render, Box, Text, useApp, useInput, useStdout } from "ink";
-import TextInput from "ink-text-input";
 import { renderLogo } from "./ascii.js";
 import { streamChat } from "./llm.js";
 import { McpManager } from "./mcp.js";
 import { builtinToolsAsMcp, isBuiltin, runBuiltin } from "./tools.js";
 import { loadSkills, readSkillContent, SKILL_TOOL, type Skill } from "./skills.js";
 import { buildSystemPrompt, modeLabel, nextMode, type Mode } from "./modes.js";
-import { log, logFile, type LogLevel } from "./logger.js";
+import { log, logFile } from "./logger.js";
 import type { AppConfig, ChatMessage, McpTool, ReasoningLevel, StreamEvent } from "./types.js";
 import { REASONING_LEVELS } from "./types.js";
 
@@ -30,10 +29,100 @@ interface UIMessage {
   toolName?: string;
 }
 
+// Custom input component that handles shortcuts without passing them to input
+const ShortcutInput: React.FC<{
+  value: string;
+  onChange: (v: string) => void;
+  onSubmit: (v: string) => void;
+  placeholder: string;
+  streaming: boolean;
+  onCycleReasoning: () => void;
+  onCycleMode: () => void;
+  onCancel: () => void;
+}> = ({
+  value,
+  onChange,
+  onSubmit,
+  placeholder,
+  streaming,
+  onCycleReasoning,
+  onCycleMode,
+  onCancel,
+}) => {
+  const [showCursor, setShowCursor] = useState(true);
+
+  useEffect(() => {
+    const interval = setInterval(() => setShowCursor((c) => !c), 530);
+    return () => clearInterval(interval);
+  }, []);
+
+  useInput((input, key) => {
+    if (key.ctrl && (input === "e" || input === "\u0005")) {
+      onCycleReasoning();
+      return;
+    }
+    if (key.ctrl && (input === "o" || input === "\u000f")) {
+      onCycleMode();
+      return;
+    }
+    if (key.ctrl && (input === "c" || input === "\u0003")) {
+      onCancel();
+      return;
+    }
+    if (key.return) {
+      onSubmit(value);
+      onChange("");
+      return;
+    }
+    if (key.backspace || key.delete) {
+      onChange(value.slice(0, -1));
+      return;
+    }
+    if (key.upArrow || key.downArrow || key.leftArrow || key.rightArrow || key.escape || key.tab || key.pageUp || key.pageDown) {
+      return;
+    }
+    if (input && !key.ctrl && !key.meta) {
+      onChange(value + input);
+    }
+  });
+
+  const displayPlaceholder = !streaming && !value;
+
+  return (
+    <Box flexDirection="row" marginTop={1}>
+      <Text color="magenta" bold>{"> "}</Text>
+      <Box flexGrow={1} paddingLeft={1}>
+        {value ? (
+          <>
+            <Text>{value}</Text>
+            {showCursor && <Text color="magenta" bold>{" |"}</Text>}
+          </>
+        ) : displayPlaceholder ? (
+          <Text dimColor italic>{placeholder}</Text>
+        ) : (
+          <Text dimColor italic>{"[...] aguardando resposta"}</Text>
+        )}
+      </Box>
+    </Box>
+  );
+};
+
 const App: React.FC<AppProps> = ({ config, overrides }) => {
   const { exit } = useApp();
   const { stdout } = useStdout();
-  const [cols, rows] = [stdout?.columns ?? 100, stdout?.rows ?? 40];
+
+  useEffect(() => {
+    if (!stdout) return;
+    const handler = () => {
+      setCols(stdout.columns);
+      setRows(stdout.rows);
+    };
+    stdout.on("resize", handler);
+    return () => {
+      stdout.off("resize", handler);
+    };
+  }, [stdout]);
+
   const [model] = useState(overrides.model ?? config.model);
   const [reasoning, setReasoning] = useState<ReasoningLevel>(overrides.reasoning ?? config.reasoning);
   const [mode, setMode] = useState<Mode>(overrides.mode ?? config.mode ?? "programação");
@@ -41,12 +130,12 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [liveText, setLiveText] = useState("");
-  const [liveThinking, setLiveThinking] = useState("");
-  const [lastThinking, setLastThinking] = useState("");
   const [status, setStatus] = useState("pronto");
   const [mcpCount, setMcpCount] = useState(0);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [cols, setCols] = useState(stdout?.columns ?? 100);
+  const [rows, setRows] = useState(stdout?.rows ?? 40);
   const mcpRef = useRef<McpManager | null>(null);
   const skillsRef = useRef<Skill[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -63,24 +152,24 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
       const loaded = await loadSkills();
       skillsRef.current = loaded;
       setSkills(loaded);
-      await log("info", `siliconflower iniciado — provider=${config.provider} model=${model}`);
+      await log("info", `siliconflower iniciado - provider=${config.provider} model=${model}`);
       await log("info", `skills carregadas: ${loaded.length} (${loaded.map((s) => s.name).join(", ") || "nenhuma"})`);
-      setStatus("conectando MCP…");
+      setStatus("conectando MCP...");
       try {
         const tools = await mcp.connectAll(config.mcpServers);
         setMcpCount(tools.length);
         await log("ok", `MCP conectado: ${mcp.serverCount()} servidores, ${tools.length} ferramentas`);
         setStatus(tools.length ? "pronto" : "pronto (sem MCP)");
       } catch (e) {
-        await log("warn", `MCP indisponível: ${String(e)}`);
-        setStatus("MCP indisponível");
+        await log("warn", `MCP indisponivel: ${String(e)}`);
+        setStatus("MCP indisponivel");
       }
     })();
     return () => {
-      mcp.close();
       abortRef.current?.abort();
-      void log("info", "siliconflower encerrado").then(() => {});
+      void mcp.close().then(() => log("info", "siliconflower encerrado"));
     };
+    // boot runs once on mount; config/model are read once at start
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -89,6 +178,8 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
       const idx = REASONING_LEVELS.indexOf(r);
       const next = REASONING_LEVELS[(idx + 1) % REASONING_LEVELS.length];
       void log("info", `reasoning alterado: ${r} -> ${next}`);
+      setStatus(`reasoning: ${next}`);
+      setTimeout(() => setStatus("pronto"), 1200);
       return next;
     });
   }, []);
@@ -97,26 +188,21 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
     setMode((m) => {
       const n = nextMode(m);
       void log("info", `modo alterado: ${m} -> ${n}`);
+      setStatus(`modo: ${n}`);
+      setTimeout(() => setStatus("pronto"), 1200);
       return n;
     });
   }, []);
 
-  useInput((ch, key) => {
-    const c = ch.toLowerCase();
-    if (key.ctrl && c === "e") {
-      cycleReasoning();
-    } else if (key.ctrl && c === "m") {
-      cycleMode();
-    } else if (key.ctrl && c === "c") {
-      if (streaming) {
-        abortRef.current?.abort();
-        setStatus("cancelado");
-        void log("warn", "stream cancelado pelo usuário");
-      } else {
-        exit();
-      }
+  const handleCancel = useCallback(() => {
+    if (streaming) {
+      abortRef.current?.abort();
+      setStatus("cancelado");
+      void log("warn", "stream cancelado pelo usuário");
+    } else {
+      exit();
     }
-  });
+  }, [streaming, exit]);
 
   const allTools = useCallback((): McpTool[] => {
     const mcp = mcpRef.current;
@@ -174,7 +260,6 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
           .map((m) => ({
             role: m.role as "user" | "assistant",
             content: m.content,
-            reasoning: m.reasoning,
           })),
         { role: "user" as const, content: text.trim() },
       ];
@@ -182,7 +267,6 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
       setInput("");
       setStreaming(true);
       setLiveText("");
-      setLiveThinking("");
       setStatus("pensando…");
 
       const currentMode = modeRef.current;
@@ -194,7 +278,6 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
       await log("info", `>>> usuário (modo=${currentMode}, reasoning=${reasoning}, tools=${tools.length}): ${text.trim().slice(0, 300)}`);
 
       let accText = "";
-      let accThink = "";
       const convo: ChatMessage[] = [...history];
       let hadError = false;
 
@@ -211,8 +294,6 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
         for await (const ev of gen as AsyncIterable<StreamEvent>) {
           switch (ev.type) {
             case "thinking":
-              accThink += ev.text;
-              setLiveThinking(accThink);
               break;
             case "text":
               accText += ev.text;
@@ -224,6 +305,7 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
                 { role: "tool", content: `→ ${ev.name}(${ev.args})`, toolName: ev.name },
               ]);
               setStatus(`executando ${ev.name}…`);
+              setLiveText("");
               break;
             case "tool_result":
               setMessages((m) => [
@@ -234,22 +316,24 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
                   toolName: ev.name,
                 },
               ]);
+              accText = "";
+              setLiveText("");
               break;
             case "error":
               hadError = true;
               setError(ev.message);
+              setLiveText("");
               await log("error", `stream erro: ${ev.message}`);
               break;
             case "done":
-              if (ev.content) {
+              if (ev.content && ev.content.trim()) {
                 setMessages((m) => [
                   ...m,
                   { role: "assistant", content: ev.content, reasoning: ev.reasoning },
                 ]);
               }
-              setLastThinking(ev.reasoning || accThink);
               if (!hadError) {
-                await log("ok", `<<< resposta (${accText.length} chars, ${accThink.length} reasoning)`);
+                await log("ok", `<<< resposta (${accText.length} chars)`);
               }
               break;
           }
@@ -262,24 +346,28 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
         setStatus("erro");
         await log("error", `send falhou: ${msg}`);
         if (accText) {
-          setMessages((m) => [...m, { role: "assistant", content: accText, reasoning: accThink }]);
+          setMessages((m) => [...m, { role: "assistant", content: accText }]);
         }
       } finally {
         setStreaming(false);
         setLiveText("");
-        setLiveThinking("");
         abortRef.current = null;
       }
     },
     [config, model, reasoning, streaming, messages, allTools, executeTool]
   );
 
+  function truncate(s: string, n: number): string {
+    const one = s.replace(/\s+/g, " ").trim();
+    return one.length > n ? one.slice(0, n) + "…" : one;
+  }
+
   const logoLines = art.split("\n");
   const logoHeight = logoLines.length;
   const footerHeight = 9;
   const transcriptHeight = Math.max(3, rows - logoHeight - footerHeight - 2);
 
-  const visible = messages.slice(-Math.max(1, Math.floor(transcriptHeight / 2)));
+  const visible = messages.slice(-Math.max(1, Math.floor(transcriptHeight / 2) + (streaming ? 1 : 0)));
   const totalTools = builtinToolsAsMcp().length + 1 + mcpCount;
 
   return (
@@ -292,17 +380,17 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
         ))}
       </Box>
 
-      <Box flexDirection="column" marginTop={0}>
+      <Box flexDirection="column" marginTop={1} marginBottom={1}>
         <Text dimColor>{"─".repeat(Math.min(cols, 100))}</Text>
         <Box flexDirection="column" height={transcriptHeight} overflowY="hidden">
           {visible.length === 0 && (
             <Text dimColor italic>
               {" "}
-              Envie uma mensagem para o modelo. (Enter envia · Ctrl+E reasoning · Ctrl+M modo · Ctrl+C cancela/sai)
+              Envie uma mensagem para o modelo. (Enter envia · Ctrl+E reasoning · Ctrl+O modo · Ctrl+C cancela/sai)
             </Text>
           )}
           {visible.map((m, i) => (
-            <Box key={i} flexDirection="column">
+            <Box key={i} flexDirection="column" marginBottom={1}>
               <Text>
                 <Text color={m.role === "user" ? "cyan" : m.role === "tool" ? "yellow" : "green"} bold>
                   {m.role === "user" ? "você" : m.role === "tool" ? "tool" : "ia"}{" > "}
@@ -312,92 +400,72 @@ const App: React.FC<AppProps> = ({ config, overrides }) => {
             </Box>
           ))}
           {streaming && liveText && (
-            <Text>
-              <Text color="green" bold>
-                ia{" > "}
+            <Box marginTop={1} marginBottom={1}>
+              <Text>
+                <Text color="green" bold>
+                  ia{" > "}
+                </Text>
+                <Text>{liveText}</Text>
               </Text>
-              <Text>{liveText}</Text>
-            </Text>
+            </Box>
           )}
         </Box>
       </Box>
 
-      <Box
-        borderStyle="round"
-        borderColor="magenta"
-        flexDirection="column"
-        marginTop={1}
-        paddingLeft={1}
-        paddingRight={1}
-      >
-        <Box>
-          <Text color="magenta" bold>
-            {"> "}
+      <ShortcutInput
+        value={input}
+        onChange={setInput}
+        onSubmit={send}
+        placeholder={streaming ? "aguardando resposta…" : error ? "erro — tente novamente" : "digite para a LLM…"}
+        streaming={streaming}
+        onCycleReasoning={cycleReasoning}
+        onCycleMode={cycleMode}
+        onCancel={handleCancel}
+      />
+
+      <Box flexDirection="column" marginTop={1} marginBottom={1}>
+        <Text dimColor>{"─".repeat(Math.min(cols, 100))}</Text>
+        <Box flexDirection="row" flexWrap="wrap">
+          <Text>
+            <Text color="green" bold>Model:</Text> <Text>{model}</Text>
           </Text>
-          <TextInput
-            value={input}
-            onChange={setInput}
-            placeholder={streaming ? "aguardando resposta…" : "digite para a LLM…"}
-            onSubmit={send}
-          />
+          <Text dimColor>{" │ "}</Text>
+          <Text>
+            <Text color="magenta" bold>Reasoning:</Text> <Text color={reasoning === "none" ? "gray" : "magenta"}>{REASONING_LABEL[reasoning]}</Text>
+          </Text>
+          <Text dimColor>{" │ "}</Text>
+          <Text>
+            <Text color="blue" bold>Modo:</Text> <Text color={mode === "sistema" ? "red" : "blue"}>{modeLabel(mode)}</Text>
+          </Text>
+          <Text dimColor>{" │ "}</Text>
+          <Text>
+            <Text color="yellow" bold>Tools:</Text> <Text>{totalTools}</Text>
+          </Text>
+          <Text dimColor>{" │ "}</Text>
+          <Text>
+            <Text color="cyan" bold>Skills:</Text> <Text>{skills.length}</Text>
+          </Text>
+        </Box>
+        <Box marginTop={1}>
+          <Text dimColor italic>{status}</Text>
         </Box>
       </Box>
 
-      <Box marginTop={0}>
-        <Text>
+      {streaming && reasoning !== "none" && (
+        <Box marginTop={1} marginBottom={1}>
           <Text color="green" bold>
-            Model:{" "}
-          </Text>
-          <Text>{model} </Text>
-          <Text color="magenta" bold>
-            | Reasoning:{" "}
-          </Text>
-          <Text color={reasoning === "none" ? "gray" : "magenta"}>{REASONING_LABEL[reasoning]} </Text>
-          <Text color="blue" bold>
-            | Modo:{" "}
-          </Text>
-          <Text color={mode === "sistema" ? "red" : "blue"}>{modeLabel(mode)} </Text>
-          <Text color="yellow" bold>
-            | Tools:{" "}
-          </Text>
-          <Text>{totalTools} </Text>
-          <Text color="cyan" bold>
-            | Skills:{" "}
-          </Text>
-          <Text>{skills.length} </Text>
-          <Text dimColor>| </Text>
-          <Text dimColor italic>
-            {status}
-          </Text>
-        </Text>
-      </Box>
-
-      <Box flexDirection="column">
-        <Text color="gray" bold>
-          Pensamento:
-        </Text>
-        <Box height={3} overflowY="hidden">
-          <Text dimColor italic wrap="truncate">
-            {streaming
-              ? liveThinking || "…"
-              : lastThinking
-                ? lastThinking.slice(-300)
-                : "(nenhum pensamento registrado)"}
+            {"[THINKING]"}
           </Text>
         </Box>
-        {error && (
-          <Text color="red">⚠ {error}</Text>
-        )}
-        <Text dimColor>log: {logFile().replace(/\\/g, "/")}</Text>
-      </Box>
+      )}
+
+      {error && (
+        <Text color="red">[ERRO] {error}</Text>
+      )}
+      <Text dimColor>log: {logFile().replace(/\\/g, "/")}</Text>
     </Box>
   );
 };
-
-function truncate(s: string, n: number): string {
-  const one = s.replace(/\s+/g, " ").trim();
-  return one.length > n ? one.slice(0, n) + "…" : one;
-}
 
 export function startApp(config: AppConfig, overrides: { model?: string; reasoning?: ReasoningLevel; mode?: Mode }) {
   render(<App config={config} overrides={overrides} />);

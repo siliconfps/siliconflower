@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { mkdir, appendFile, readFile, stat } from "node:fs/promises";
+import { mkdir, appendFile, readFile, writeFile, stat } from "node:fs/promises";
 
 const LOG_DIR = join(homedir(), ".siliconflower", "logs");
 const LOG_FILE = join(LOG_DIR, "siliconflower.log");
@@ -26,11 +26,10 @@ async function rotateIfNeeded() {
     if (st && st.size > MAX_BYTES) {
       const old = await readFile(LOG_FILE, "utf8").catch(() => "");
       const trimmed = old.slice(-Math.floor(MAX_BYTES / 2));
-      const { writeFile } = await import("node:fs/promises");
       await writeFile(LOG_FILE, trimmed, "utf8");
     }
   } catch {
-    /* ignore */
+    /* rotation best-effort */
   }
 }
 
@@ -67,3 +66,4 @@ export async function tailLogs(n = 50): Promise<string> {
     return "(sem logs)";
   }
 }
+

@@ -35,9 +35,9 @@ function enrichError(err: unknown, config: AppConfig): string {
   const inner = e?.error?.message ?? e?.message ?? String(err);
   const hint =
     status === 404
-      ? ` — 404: verifique o PROVIDER (openai vs anthropic), o baseURL e o ID do modelo. SiliconFlow usa provider "openai" e baseURL ".../v1".`
+      ? ` - 404: check PROVIDER (openai vs anthropic), the baseURL, and the model ID. SiliconFlow uses the "openai" variant and a baseURL ending in "/v1".`
       : status === 401
-        ? " — 401: API key inválida."
+        ? " - 401: API key is invalid."
         : "";
   return `[${config.provider}] ${inner}${status ? ` (HTTP ${status})` : ""}${hint}`;
 }
@@ -88,7 +88,6 @@ async function* streamOpenAI(opts: ChatOptions): AsyncGenerator<StreamEvent> {
   const effort = reasoning !== "none" ? reasoning : undefined;
 
   let working = buildOpenAIMessages(config, messages);
-  const convo = [...messages];
 
   for (let step = 0; step < 8; step++) {
     let content = "";
@@ -165,7 +164,6 @@ async function* streamOpenAI(opts: ChatOptions): AsyncGenerator<StreamEvent> {
     }
 
     // Record the assistant tool-call message and execute.
-    convo.push({ role: "assistant", content: content || "(chamando ferramentas)", reasoning: thinking });
     working.push({
       role: "assistant",
       content: content || "",
@@ -200,7 +198,6 @@ async function* streamOpenAI(opts: ChatOptions): AsyncGenerator<StreamEvent> {
         tool_call_id: call.id,
         content: result,
       } as OpenAI.Chat.Completions.ChatCompletionToolMessageParam);
-      convo.push({ role: "tool", content: result, toolName: call.name });
     }
     // loop continues: model sees tool results and may respond or call again.
   }
@@ -251,7 +248,6 @@ async function* streamAnthropic(opts: ChatOptions): AsyncGenerator<StreamEvent> 
   const effort = reasoning !== "none" ? BUDGET[reasoning] : undefined;
 
   let working = buildAnthropicMessages(messages);
-  const convo = [...messages];
 
   for (let step = 0; step < 8; step++) {
     let content = "";
@@ -302,7 +298,6 @@ async function* streamAnthropic(opts: ChatOptions): AsyncGenerator<StreamEvent> 
       return;
     }
 
-    convo.push({ role: "assistant", content: content || "(chamando ferramentas)", reasoning: thinking });
     working.push({
       role: "assistant",
       content: [
@@ -340,7 +335,6 @@ async function* streamAnthropic(opts: ChatOptions): AsyncGenerator<StreamEvent> 
           },
         ],
       });
-      convo.push({ role: "tool", content: result, toolName: call.name });
     }
   }
 

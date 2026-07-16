@@ -23,7 +23,7 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   {
     name: "read_file",
     description:
-      "LÃª o conteÃºdo de um arquivo de texto do sistema. Use caminhos absolutos (ex: C:/Users/Eli/foo.txt) ou relativos ao diretÃ³rio atual.",
+      "Lê o conteúdo de um arquivo de texto do sistema. Use caminhos absolutos (ex: C:/Users/Eli/foo.txt) ou relativos ao diretório atual.",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string", description: "Caminho do arquivo" } },
@@ -42,12 +42,12 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   {
     name: "write_file",
     description:
-      "Cria ou sobrescreve um arquivo de texto. Cria diretÃ³rios pai se necessÃ¡rio. CUIDADO: sobrescreve arquivos existentes sem aviso.",
+      "Cria ou sobrescreve um arquivo de texto. Cria diretórios pai se necessário. CUIDADO: sobrescreve arquivos existentes sem aviso.",
     inputSchema: {
       type: "object",
       properties: {
         path: { type: "string" },
-        content: { type: "string", description: "ConteÃºdo completo do arquivo" },
+        content: { type: "string", description: "Conteúdo completo do arquivo" },
       },
       required: ["path", "content"],
     },
@@ -65,7 +65,7 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   {
     name: "edit_file",
     description:
-      "Edita um arquivo substituindo a primeira ocorrÃªncia de oldText por newText. Use replaceAll=true para substituir todas.",
+      "Edita um arquivo substituindo a primeira ocorrência de oldText por newText. Use replaceAll=true para substituir todas.",
     inputSchema: {
       type: "object",
       properties: {
@@ -86,10 +86,10 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
           updated = original.split(String(a.oldText)).join(String(a.newText));
         } else {
           const idx = original.indexOf(String(a.oldText));
-          if (idx === -1) return { result: `oldText nÃ£o encontrado em ${path}`, isError: true };
+          if (idx === -1) return { result: `oldText não encontrado em ${path}`, isError: true };
           updated = original.slice(0, idx) + String(a.newText) + original.slice(idx + String(a.oldText).length);
         }
-        if (updated === original) return { result: `Nenhuma alteraÃ§Ã£o em ${path}`, isError: false };
+        if (updated === original) return { result: `Nenhuma alteração em ${path}`, isError: false };
         await writeFile(path, updated, "utf8");
         return { result: `Editado: ${path}`, isError: false };
       } catch (e) {
@@ -99,10 +99,10 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   },
   {
     name: "list_directory",
-    description: "Lista arquivos e pastas de um diretÃ³rio.",
+    description: "Lista arquivos e pastas de um diretório.",
     inputSchema: {
       type: "object",
-      properties: { path: { type: "string", description: "DiretÃ³rio (padrÃ£o: cwd)" } },
+      properties: { path: { type: "string", description: "Diretório (padrão: cwd)" } },
       required: [],
     },
     run: async (a) => {
@@ -110,7 +110,7 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
       try {
         const entries = await readdir(path, { withFileTypes: true });
         const lines = entries.map((e) => `${e.isDirectory() ? "[DIR] " : "[FILE] "}${e.name}`).sort();
-        return { result: lines.length ? lines.join("\n") : "(diretÃ³rio vazio)", isError: false };
+        return { result: lines.length ? lines.join("\n") : "(diretório vazio)", isError: false };
       } catch (e) {
         return { result: `Erro ao listar ${path}: ${String(e)}`, isError: true };
       }
@@ -118,7 +118,7 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   },
   {
     name: "create_directory",
-    description: "Cria um diretÃ³rio (e subdiretÃ³rios) se nÃ£o existir.",
+    description: "Cria um diretório (e subdiretórios) se não existir.",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string" } },
@@ -128,15 +128,15 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
       const path = toAbs(String(a.path));
       try {
         await mkdir(path, { recursive: true });
-        return { result: `DiretÃ³rio criado/confirmado: ${path}`, isError: false };
+        return { result: `Diretório criado/confirmado: ${path}`, isError: false };
       } catch (e) {
-        return { result: `Erro ao criar diretÃ³rio ${path}: ${String(e)}`, isError: true };
+        return { result: `Erro ao criar diretório ${path}: ${String(e)}`, isError: true };
       }
     },
   },
   {
     name: "move_path",
-    description: "Move ou renomeia um arquivo/diretÃ³rio.",
+    description: "Move ou renomeia um arquivo/diretório.",
     inputSchema: {
       type: "object",
       properties: { source: { type: "string" }, destination: { type: "string" } },
@@ -156,7 +156,7 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   },
   {
     name: "file_info",
-    description: "Retorna metadados de um arquivo/diretÃ³rio (tamanho, datas, tipo).",
+    description: "Retorna metadados de um arquivo/diretório (tamanho, datas, tipo).",
     inputSchema: {
       type: "object",
       properties: { path: { type: "string" } },
@@ -187,12 +187,12 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   },
   {
     name: "search_files",
-    description: "Busca arquivos por padrÃ£o glob (ex: '**/*.ts'). Retorna caminhos absolutos.",
+    description: "Busca arquivos por padrão glob (ex: '**/*.ts'). Retorna caminhos absolutos.",
     inputSchema: {
       type: "object",
       properties: {
-        path: { type: "string", description: "DiretÃ³rio base da busca" },
-        pattern: { type: "string", description: "PadrÃ£o glob, ex: **/*.md" },
+        path: { type: "string", description: "Diretório base da busca" },
+        pattern: { type: "string", description: "Padrão glob, ex: **/*.md" },
       },
       required: ["path", "pattern"],
     },
@@ -209,26 +209,36 @@ export const BUILTIN_TOOLS: BuiltinTool[] = [
   {
     name: "delete_path",
     description:
-      "DESTRUTIVO: exclui um arquivo ou diretÃ³rio. Use recursive=true para diretÃ³rios nÃ£o vazios. Confirme a necessidade antes de usar.",
+      "DESTRUTIVO: exclui um arquivo ou diretório. Use recursive=true para diretórios não vazios. Requer confirm=true quando recursive=true. Confirme a necessidade antes de usar.",
     destructive: true,
     inputSchema: {
       type: "object",
       properties: {
         path: { type: "string" },
-        recursive: { type: "boolean", default: false, description: "NecessÃ¡rio para diretÃ³rios nÃ£o vazios" },
+        recursive: { type: "boolean", default: false, description: "Necessário para diretórios não vazios" },
+        confirm: { type: "boolean", default: false, description: "Obrigatório quando recursive=true" },
       },
       required: ["path"],
     },
     run: async (a) => {
       const path = toAbs(String(a.path));
+      const recursive = Boolean(a.recursive);
+      const confirm = Boolean(a.confirm);
+      if (recursive && !confirm) {
+        return {
+          result:
+            "Operação destrutiva em diretório requer confirmação. Rechame com confirm=true após confirmar com o usuário.",
+          isError: true,
+        };
+      }
       try {
         await access(path);
       } catch {
-        return { result: `Caminho nÃ£o existe: ${path}`, isError: true };
+        return { result: `Caminho não existe: ${path}`, isError: true };
       }
       try {
-        await rm(path, { recursive: Boolean(a.recursive), force: false });
-        return { result: `ExcluÃ­do: ${path}`, isError: false };
+        await rm(path, { recursive, force: false });
+        return { result: `Excluído: ${path}`, isError: false };
       } catch (e) {
         return { result: `Erro ao excluir ${path}: ${String(e)}`, isError: true };
       }

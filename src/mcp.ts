@@ -68,9 +68,9 @@ export class McpManager {
       const text = content
         .map((c) => (c && typeof c === "object" && "text" in c ? String((c as { text: unknown }).text) : JSON.stringify(c)))
         .join("\n");
-      return text || "(sem conteúdo)";
+      return text || "(empty content)";
     }
-    throw new Error(`ferramenta não encontrada: ${name}`);
+    throw new Error(`tool not found: ${name}`);
   }
 
   serverCount(): number {

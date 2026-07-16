@@ -15,9 +15,7 @@ function findRunner() {
   ];
   for (const [cmd, args] of order) {
     const probe = spawnSync(cmd, ["--version"], { shell: true, stdio: "ignore" });
-    if (probe.status === 0 || probe.error === undefined) {
-      // On Windows the version check may still succeed even if the binary is
-      // missing via shell aliases, so just attempt the real run and let it fail.
+    if (!probe.error && probe.status === 0) {
       return [cmd, args];
     }
   }

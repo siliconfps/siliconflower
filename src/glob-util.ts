@@ -3,11 +3,25 @@ import { join, relative } from "node:path";
 
 function globToRegex(pattern: string): RegExp {
   let re = "^";
-  for (const ch of pattern) {
-    if (ch === "*") re += "[^/]*";
-    else if (ch === "?") re += "[^/]";
-    else if (".+()[]{}^$|\\".includes(ch)) re += "\\" + ch;
-    else re += ch;
+  let i = 0;
+  while (i < pattern.length) {
+    const ch = pattern[i];
+    if (ch === "*" && i + 1 < pattern.length && pattern[i + 1] === "*") {
+      re += ".*";
+      i += 2;
+    } else if (ch === "*") {
+      re += "[^/]*";
+      i++;
+    } else if (ch === "?") {
+      re += "[^/]";
+      i++;
+    } else if (".+()[]{}^$|\\".includes(ch)) {
+      re += "\\" + ch;
+      i++;
+    } else {
+      re += ch;
+      i++;
+    }
   }
   re += "$";
   return new RegExp(re);
@@ -16,12 +30,10 @@ function globToRegex(pattern: string): RegExp {
 export async function search(root: string, pattern: string): Promise<string[]> {
   const base = await safeStat(root);
   if (!base || !base.isDirectory()) {
-    // maybe root is a file pattern itself
     return [];
   }
   const results: string[] = [];
   const re = globToRegex(pattern);
-  const hasGlobDir = pattern.includes("**");
   const limit = 1000;
 
   async function walk(dir: string, depth: number) {
@@ -40,7 +52,7 @@ export async function search(root: string, pattern: string): Promise<string[]> {
       const rel = relative(root, full).replace(/\\/g, "/");
       if (re.test(rel)) results.push(full);
       if (e.isDirectory()) {
-        if (hasGlobDir || pattern.includes("/")) await walk(full, depth + 1);
+        await walk(full, depth + 1);
       }
     }
   }
